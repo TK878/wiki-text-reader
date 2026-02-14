@@ -1,5 +1,5 @@
 /**
- * History Full-Text Reader - NDC (Nippon Decimal Classification) Based Logic
+ * History Full-Text Reader - NDC Optimized & Category Fix
  */
 
 // ========================================
@@ -61,28 +61,26 @@ function fetchWithTimeout(url, timeout = CONFIG.API_TIMEOUT_MS) {
 }
 
 /**
- * 【NDC体系に基づくカテゴリ探索】
- * ご提示いただいたリストに基づき、Wikipediaの膨大な歴史カテゴリを掘り下げる
+ * 【修正箇所】Wikipediaの実際のカテゴリ名に最適化したNDCリスト
  */
 async function getRandomTopic() {
-    // 日本十進分類法（NDC）の歴史項目に基づいたシードカテゴリ
     const categories = [
         "歴史", "世界史", "日本の歴史", 
-        "北海道地方の歴史", "東北地方の歴史", "関東地方の歴史", "北陸地方の歴史", 
+        "北海道の歴史", "東北地方の歴史", "関東地方の歴史", "北陸地方の歴史", 
         "中部地方の歴史", "近畿地方の歴史", "中国地方の歴史", "四国地方の歴史", "九州地方の歴史",
-        "アジアの歴史", "朝鮮の歴史", "中国の歴史", "東南アジアの歴史", "インドネシアの歴史", "インドの歴史", "中東の歴史", 
-        "ヨーロッパの歴史", "古代ギリシア", "古代ローマ", "イギリスの歴史", "ドイツの歴史", "フランスの歴史", "スペインの歴史", "イタリアの歴史", "ロシアの歴史", "バルカン半島の歴史",
-        "アフリカの歴史", "北アフリカの歴史", "エジプトの歴史", "南アフリカの歴史", 
+        "アジア史", "朝鮮の歴史", "中国の歴史", "東南アジア史", "インドネシアの歴史", "インドの歴史", "中東史", 
+        "ヨーロッパ史", "古代ギリシア", "古代ローマ", "イギリスの歴史", "ドイツの歴史", "フランスの歴史", "スペインの歴史", "イタリアの歴史", "ロシアの歴史", "バルカン半島の歴史",
+        "アフリカ史", "北アフリカ史", "エジプトの歴史", "南アフリカ共和国の歴史", 
         "北アメリカの歴史", "カナダの歴史", "アメリカ合衆国の歴史", 
-        "ラテンアメリカの歴史", "メキシコの歴史", "中央アメリカの歴史", "南アメリカの歴史", "ブラジルの歴史", "アルゼンチンの歴史",
-        "オセアニアの歴史", "オーストラリアの歴史", "ニュージーランドの歴史", "ハワイの歴史",
-        "伝記", "個人伝記", "地誌", "海洋の歴史"
+        "ラテンアメリカ史", "メキシコの歴史", "中央アメリカ史", "南アメリカ史", "ブラジルの歴史", "アルゼンチンの歴史",
+        "オセアニア史", "オーストラリアの歴史", "ニュージーランドの歴史", "ハワイ州の歴史",
+        "海事史"
     ];
     
     let targetCat = categories[Math.floor(Math.random() * categories.length)];
-    const maxDepth = 2; // 下位カテゴリへ潜る深さ
+    const maxDepth = 2; 
 
-    // 1. 再帰的に下位カテゴリをランダムに辿る
+    // 1. 再帰的に下位カテゴリを辿る
     for (let i = 0; i < maxDepth; i++) {
         const subCatUrl = new URL(CONFIG.API_URL);
         subCatUrl.searchParams.append('format', 'json');
@@ -103,24 +101,23 @@ async function getRandomTopic() {
                     !c.title.includes('スタブ') && 
                     !c.title.includes('画像') && 
                     !c.title.includes('テンプレート') &&
-                    !c.title.includes('ウィキ') &&
                     !c.title.includes('Wikipedia') &&
                     !c.title.includes('カテゴリ')
                 );
                 
-                const pool = filtered.length > 0 ? filtered : subCats;
-                const nextCat = pool[Math.floor(Math.random() * pool.length)];
-                targetCat = nextCat.title.replace(/^Category:/, "");
+                if (filtered.length > 0) {
+                    const nextCat = filtered[Math.floor(Math.random() * filtered.length)];
+                    targetCat = nextCat.title.replace(/^Category:/, "");
+                }
             } else {
                 break; 
             }
         } catch (e) {
-            console.warn(`サブカテゴリ取得失敗: ${targetCat}`, e);
             break; 
         }
     }
 
-    // 2. 確定したカテゴリからランダムな文字位置で記事を取得
+    // 2. 記事取得時のランダム開始位置設定
     const chars = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわABCDE";
     const randomStart = chars[Math.floor(Math.random() * chars.length)];
 
@@ -129,42 +126,33 @@ async function getRandomTopic() {
     url.searchParams.append('action', 'query');
     url.searchParams.append('list', 'categorymembers');
     url.searchParams.append('cmtitle', 'Category:' + targetCat);
-    url.searchParams.append('cmstartsortkeyprefix', randomStart); 
+    url.searchParams.append('cmstartsortkeyprefix', randomStart); // ランダム開始
     url.searchParams.append('cmlimit', '100');
     url.searchParams.append('origin', '*');
 
     const res = await fetchWithTimeout(url.toString());
     const data = await res.json();
     
-    // ヒットしなかった場合の処理
-    if (!data.query || !data.query.categorymembers || data.query.categorymembers.length === 0) {
-        const fallbackUrl = new URL(CONFIG.API_URL);
-        fallbackUrl.searchParams.append('format', 'json');
-        fallbackUrl.searchParams.append('action', 'query');
-        fallbackUrl.searchParams.append('list', 'categorymembers');
-        fallbackUrl.searchParams.append('cmtitle', 'Category:' + targetCat);
-        fallbackUrl.searchParams.append('cmlimit', '100');
-        fallbackUrl.searchParams.append('origin', '*');
-        
-        const fallbackRes = await fetchWithTimeout(fallbackUrl.toString());
-        const fallbackData = await fallbackRes.json();
-        
-        if (!fallbackData.query || !fallbackData.query.categorymembers || fallbackData.query.categorymembers.length === 0) {
-             throw new Error(`カテゴリ【${targetCat}】の記事取得に失敗`);
-        }
-        
-        const members = fallbackData.query.categorymembers;
-        const pages = members.filter(m => m.ns === 0);
-        if (pages.length === 0) throw new Error(`カテゴリ【${targetCat}】内に記事なし`);
-        const randomPage = pages[Math.floor(Math.random() * pages.length)];
-        return { title: randomPage.title, category: targetCat };
+    // ヒットしなかった場合のセーフティ
+    let members = (data.query && data.query.categorymembers) ? data.query.categorymembers : [];
+    
+    if (members.length === 0) {
+        // 開始位置指定なしで再取得
+        const retryUrl = new URL(CONFIG.API_URL);
+        retryUrl.searchParams.append('format', 'json');
+        retryUrl.searchParams.append('action', 'query');
+        retryUrl.searchParams.append('list', 'categorymembers');
+        retryUrl.searchParams.append('cmtitle', 'Category:' + targetCat);
+        retryUrl.searchParams.append('cmlimit', '100');
+        retryUrl.searchParams.append('origin', '*');
+        const retryRes = await fetchWithTimeout(retryUrl.toString());
+        const retryData = await retryRes.json();
+        members = retryData.query ? retryData.query.categorymembers : [];
     }
 
-    const members = data.query.categorymembers;
     const pages = members.filter(m => m.ns === 0);
-    
     if (pages.length === 0) {
-        throw new Error(`カテゴリ【${targetCat}】内に記事なし`);
+        throw new Error(`カテゴリ【${targetCat}】の記事取得に失敗`);
     }
 
     const randomPage = pages[Math.floor(Math.random() * pages.length)];
@@ -243,7 +231,6 @@ async function fetchFullText() {
         } catch (error) {
             console.warn(`Attempt ${retryCount + 1} failed: ${error.message}`);
             retryCount++;
-            
             if (retryCount > maxRetries) {
                 textArea.value = "❌ 取得できませんでした。時間をおいて再度お試しください。";
                 updateUI('error');
