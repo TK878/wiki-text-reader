@@ -113,51 +113,61 @@ async function fetchFullText() {
 
     if (!textArea || !genBtn) return;
 
-    // UI初期化
     genBtn.disabled = true;
     textArea.value = "検索中...";
     updateUI('fetching');
 
-    try {
-        // ステップ1: ランダムキーワード取得
-        const topic = await getRandomTopic();
-        textArea.value = `【${topic}】の詳細を読み込み中...`;
+    let retryCount = 0;
+    const maxRetries = 3;
+    let success = false;
 
-        // ステップ2: Wikipedia全文取得
-        const url = new URL(CONFIG.API_URL);
-        url.searchParams.append('format', 'json');
-        url.searchParams.append('action', 'query');
-        url.searchParams.append('prop', 'extracts');
-        url.searchParams.append('explaintext', '1');
-        url.searchParams.append('titles', topic);
-        url.searchParams.append('origin', '*');
+    while (retryCount <= maxRetries && !success) {
+        try {
+            // 4回目（リトライ3回失敗後）は強制的に「日本の歴史」にする
+            const topic = (retryCount === maxRetries) ? "日本の歴史" : await getRandomTopic();
+            textArea.value = (retryCount > 0) 
+                ? `再試行中(${retryCount}/${maxRetries}): 【${topic}】の詳細を読み込み中...`
+                : `【${topic}】の詳細を読み込み中...`;
 
-        const response = await fetchWithTimeout(url.toString());
-        const data = await response.json();
-        const pages = data.query.pages;
-        const pageId = Object.keys(pages)[0];
-        
-        // ページが存在しない場合のガード
-        if (pageId === "-1") throw new Error('記事が見つかりませんでした');
-        
-        const fullText = pages[pageId].extract;
+            const url = new URL(CONFIG.API_URL);
+            url.searchParams.append('format', 'json');
+            url.searchParams.append('action', 'query');
+            url.searchParams.append('prop', 'extracts');
+            url.searchParams.append('explaintext', '1');
+            url.searchParams.append('titles', topic);
+            url.searchParams.append('origin', '*');
 
-        if (!fullText) throw new Error('記事が空、または取得できませんでした');
+            const response = await fetchWithTimeout(url.toString());
+            const data = await response.json();
+            const pages = data.query.pages;
+            const pageId = Object.keys(pages)[0];
+            
+            if (pageId === "-1") throw new Error('記事が見つかりませんでした');
+            
+            const fullText = pages[pageId].extract;
+            if (!fullText) throw new Error('内容が空でした');
 
-        const content = `【主題: ${topic}】\n\n${fullText}`;
-        textArea.value = content;
-        if (charCountDisplay) charCountDisplay.textContent = `${content.length.toLocaleString()} chars`;
+            const content = `【主題: ${topic}】\n\n${fullText}`;
+            textArea.value = content;
+            if (charCountDisplay) charCountDisplay.textContent = `${content.length.toLocaleString()} chars`;
 
-        updateUI('complete');
-        textArea.scrollTop = 0;
+            updateUI('complete');
+            textArea.scrollTop = 0;
+            success = true;
 
-    } catch (error) {
-        console.error(error);
-        textArea.value = "❌ エラーが発生しました。\n再試行してください: " + error.message;
-        updateUI('error');
-    } finally {
-        genBtn.disabled = false;
+        } catch (error) {
+            console.warn(`Attempt ${retryCount + 1} failed: ${error.message}`);
+            retryCount++;
+            
+            if (retryCount > maxRetries) {
+                textArea.value = "❌ 複数回試行しましたがエラーが発生しました。\n最終エラー: " + error.message;
+                updateUI('error');
+            }
+            // 少し待機してからリトライ（API負荷軽減）
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
     }
+    genBtn.disabled = false;
 }
 
 // ========================================
