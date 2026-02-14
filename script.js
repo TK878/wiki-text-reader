@@ -1,5 +1,5 @@
 /**
- * History Full-Text Reader - Minimal Logic (Retry with Category Display)
+ * History Full-Text Reader - Optimized Random Logic
  */
 
 // ========================================
@@ -62,17 +62,23 @@ function fetchWithTimeout(url, timeout = CONFIG.API_TIMEOUT_MS) {
 
 /**
  * ランダムに歴史カテゴリからタイトルを取得
- * 変更：カテゴリ名も一緒に返すようにした
+ * 変更点：検索開始位置をランダムにして重複を回避
  */
 async function getRandomTopic() {
-    const categories = ["歴史", "日本の歴史", "世界史", "戦国武将", "フランスの歴史", "考古学"];
+    // カテゴリリストを拡充してさらに幅広く
+    const categories = ["歴史", "日本の歴史", "世界史", "戦国武将", "フランスの歴史", "考古学", "江戸時代", "中国の歴史", "中世ヨーロッパ"];
     const targetCat = categories[Math.floor(Math.random() * categories.length)];
+
+    // 【重要】ランダムな文字から検索を開始することで「あ行」ばかり出るのを防ぐ
+    const chars = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわABCDE";
+    const randomStart = chars[Math.floor(Math.random() * chars.length)];
 
     const url = new URL(CONFIG.API_URL);
     url.searchParams.append('format', 'json');
     url.searchParams.append('action', 'query');
     url.searchParams.append('list', 'categorymembers');
     url.searchParams.append('cmtitle', 'Category:' + targetCat);
+    url.searchParams.append('cmstartsortkeyprefix', randomStart); // ここで開始位置をランダム化
     url.searchParams.append('cmlimit', '100');
     url.searchParams.append('origin', '*');
 
@@ -91,7 +97,6 @@ async function getRandomTopic() {
     }
 
     const randomPage = pages[Math.floor(Math.random() * pages.length)];
-    // タイトルと使用したカテゴリをセットで返す
     return { title: randomPage.title, category: targetCat };
 }
 
@@ -127,17 +132,14 @@ async function fetchFullText() {
             let topic, category;
 
             if (retryCount < maxRetries) {
-                // 通常のランダム取得
                 const result = await getRandomTopic();
                 topic = result.title;
                 category = result.category;
             } else {
-                // 最終リトライ（4回目）
                 topic = "日本の歴史";
                 category = "";
             }
 
-            // 画面表示を更新（カテゴリ名を含める）
             const retryLabel = retryCount > 0 ? `再試行中(${retryCount}/${maxRetries}): ` : "";
             textArea.value = `${retryLabel}カテゴリ【${category}】から\n【${topic}】を取得しています...`;
 
@@ -172,7 +174,7 @@ async function fetchFullText() {
             retryCount++;
             
             if (retryCount > maxRetries) {
-                textArea.value = "❌ 取得できませんでした。時間をおいて再度お試しください。\nエラー: " + error.message;
+                textArea.value = "❌ 取得できませんでした。\nエラー: " + error.message;
                 updateUI('error');
             } else {
                 await new Promise(resolve => setTimeout(resolve, 300));
@@ -196,4 +198,3 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadPreferences();
 });
-
