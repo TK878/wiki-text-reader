@@ -1,5 +1,5 @@
 /**
- * History Full-Text Reader - Optimized Random Logic
+ * History Full-Text Reader - Dynamic Category Crawling Logic
  */
 
 // ========================================
@@ -61,15 +61,40 @@ function fetchWithTimeout(url, timeout = CONFIG.API_TIMEOUT_MS) {
 }
 
 /**
- * ランダムに歴史カテゴリからタイトルを取得
- * 変更点：検索開始位置をランダムにして重複を回避
+ * 【大幅変更箇所】
+ * 「Category:歴史」から再帰的に下位カテゴリを辿り、最終的なキーワードを抽出する
  */
 async function getRandomTopic() {
-    // カテゴリリストを拡充してさらに幅広く
-    const categories = ["歴史", "日本の歴史", "世界史", "戦国武将", "フランスの歴史", "考古学", "江戸時代", "中国の歴史", "中世ヨーロッパ"];
-    const targetCat = categories[Math.floor(Math.random() * categories.length)];
+    let targetCat = "歴史";
+    const maxDepth = 2; // 潜る深さ（2〜3回が歴史から逸脱せず多様性を保つのに最適）
 
-    // 【重要】ランダムな文字から検索を開始することで「あ行」ばかり出るのを防ぐ
+    // 1. 再帰的に下位カテゴリをランダムに辿る
+    for (let i = 0; i < maxDepth; i++) {
+        const subCatUrl = new URL(CONFIG.API_URL);
+        subCatUrl.searchParams.append('format', 'json');
+        subCatUrl.searchParams.append('action', 'query');
+        subCatUrl.searchParams.append('list', 'categorymembers');
+        subCatUrl.searchParams.append('cmtitle', 'Category:' + targetCat);
+        subCatUrl.searchParams.append('cmtype', 'subcat'); // 子カテゴリのみ
+        subCatUrl.searchParams.append('cmlimit', '40');
+        subCatUrl.searchParams.append('origin', '*');
+
+        const res = await fetchWithTimeout(subCatUrl.toString());
+        const data = await res.json();
+        const subCats = data.query.categorymembers;
+
+        if (subCats && subCats.length > 0) {
+            // スタブカテゴリや管理用カテゴリを除外する簡易フィルタ
+            const filtered = subCats.filter(c => !c.title.includes('スタブ') && !c.title.includes('画像') && !c.title.includes('テンプレート'));
+            const pool = filtered.length > 0 ? filtered : subCats;
+            // ランダムに1つ選んで次の深さの起点にする
+            targetCat = pool[Math.floor(Math.random() * pool.length)].title.replace(/^Category:/, "");
+        } else {
+            break; // 下位がなければ現在のカテゴリで確定
+        }
+    }
+
+    // 2. 確定したカテゴリからランダムな文字位置で記事を取得
     const chars = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわABCDE";
     const randomStart = chars[Math.floor(Math.random() * chars.length)];
 
@@ -78,7 +103,7 @@ async function getRandomTopic() {
     url.searchParams.append('action', 'query');
     url.searchParams.append('list', 'categorymembers');
     url.searchParams.append('cmtitle', 'Category:' + targetCat);
-    url.searchParams.append('cmstartsortkeyprefix', randomStart); // ここで開始位置をランダム化
+    url.searchParams.append('cmstartsortkeyprefix', randomStart); 
     url.searchParams.append('cmlimit', '100');
     url.searchParams.append('origin', '*');
 
@@ -137,7 +162,7 @@ async function fetchFullText() {
                 category = result.category;
             } else {
                 topic = "日本の歴史";
-                category = "";
+                category = "最終フォールバック";
             }
 
             const retryLabel = retryCount > 0 ? `再試行中(${retryCount}/${maxRetries}): ` : "";
