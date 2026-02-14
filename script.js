@@ -64,7 +64,7 @@ function fetchWithTimeout(url, timeout = CONFIG.API_TIMEOUT_MS) {
  */
 async function getRandomTopic() {
     // 取得したいカテゴリのリスト（ここを増やすとバリエーションが増える）
-    const categories = ["歴史", "日本の歴史", "世界史", "戦国武将", "フランスの歴史", "考古学"];
+    const categories = ["歴史", "日本史", "世界史", "戦国武将", "フランスの歴史", "考古学"];
     const targetCat = categories[Math.floor(Math.random() * categories.length)];
 
     const url = new URL(CONFIG.API_URL);
@@ -166,4 +166,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadPreferences();
 });
+
 
