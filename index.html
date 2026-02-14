@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://ja.wikipedia.org; style-src 'self' 'unsafe-inline';">
-    <title>History Full-Text Reader</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' https://ja.wikipedia.org; style-src 'self' 'unsafe-inline';">
+    <title>History Wiki-Text Reader</title>
     <style>
         * { box-sizing: border-box; }
         
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             margin: 0;
-            padding: 20px;
+            padding: 10px; /* スマホ用に余白を少し縮小 */
             background-color: #ffffff;
             color: #1a1a1a;
             display: flex;
@@ -23,48 +23,54 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
+            flex-wrap: wrap; /* スマホで項目が溢れたら折り返す */
+            gap: 10px;
+            margin-bottom: 10px;
             padding-bottom: 10px;
             border-bottom: 1px solid #eee;
         }
 
-        h1 { font-size: 1.1rem; margin: 0; letter-spacing: 0.1em; font-weight: 900; }
+        h1 { font-size: 1rem; margin: 0; letter-spacing: 0.1em; font-weight: 900; }
 
         .settings {
             display: flex;
-            gap: 15px;
+            gap: 10px;
             font-size: 0.75rem;
             align-items: center;
         }
 
         select, input[type="number"] {
             border: 1px solid #ddd;
-            padding: 4px 6px;
-            border-radius: 3px;
+            padding: 6px;
+            border-radius: 4px;
             background: #fff;
+            font-size: 0.9rem; /* スマホでズームされないサイズ */
         }
 
         .controls { 
             display: flex; 
-            gap: 10px; 
-            margin-bottom: 12px;
+            gap: 8px; 
+            margin-bottom: 10px;
             align-items: center;
         }
 
         button { 
-            padding: 10px 20px; 
+            flex: 1; /* ボタンを横いっぱいに広げる */
+            padding: 12px; 
             border: 1px solid #000; 
             background: #000;
             color: #fff;
-            border-radius: 3px; 
+            border-radius: 4px; 
             cursor: pointer; 
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             font-weight: bold;
+            -webkit-tap-highlight-color: transparent; /* タップ時の青枠を消す */
         }
         button:hover { background: #333; }
+        button:active { background: #555; } /* タップ時のフィードバック */
         button:disabled { border-color: #ccc; background: #ccc; cursor: not-allowed; }
 
-        #copyBtn { background: #fff; color: #000; border-color: #000; display: none; }
+        #copyBtn { background: #fff; color: #000; border-color: #000; flex: 0.4; }
 
         .main-content {
             flex-grow: 1;
@@ -73,16 +79,19 @@
             min-height: 0;
         }
 
+        /* テキストエリアの調整 */
         textarea { 
             flex-grow: 1;
             width: 100%; 
-            padding: 25px; 
+            padding: 15px; 
             border: 1px solid #eee; 
-            border-radius: 2px; 
-            line-height: 1.8; 
+            border-radius: 4px; 
+            line-height: 1.6; 
             outline: none;
             resize: none;
             background-color: #fafafa;
+            color: #333; /* 編集不可でも文字を読みやすく */
+            -webkit-overflow-scrolling: touch; /* iOSでのスクロールを滑らかに */
         }
 
         .status-bar {
@@ -91,11 +100,12 @@
             color: #999;
             display: flex;
             justify-content: space-between;
+            align-items: center;
         }
 
         #statusText {
             font-weight: 600;
-            padding: 4px 8px;
+            padding: 2px 6px;
             border-radius: 3px;
         }
 
@@ -110,6 +120,12 @@
         }
 
         .hidden { display: none !important; }
+
+        /* スマホ向け微調整 */
+        @media (max-width: 480px) {
+            h1 { width: 100%; text-align: center; }
+            .settings { width: 100%; justify-content: space-between; }
+        }
     </style>
 </head>
 <body>
@@ -117,7 +133,7 @@
 <header>
     <h1>HISTORY FULL-TEXT</h1>
     <div class="settings">
-        <div>Size: <input type="number" id="fontSize" value="14" min="8" max="50"> px</div>
+        <div>Size: <input type="number" id="fontSize" value="14" min="8" max="50" inputmode="numeric"></div>
         <div>Font: 
             <select id="fontFamily">
                 <option value="sans-serif">Sans</option>
@@ -134,7 +150,7 @@
 </div>
 
 <div class="main-content">
-    <textarea id="result" placeholder="ボタンを押すとランダムに歴史の全文が読み込まれます..."></textarea>
+    <textarea id="result" placeholder="ボタンを押すとランダムに歴史の全文が読み込まれます..." readonly></textarea>
     <div class="status-bar">
         <span id="statusText" class="status-ready">READY</span>
         <span id="charCountDisplay">0 chars</span>
