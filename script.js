@@ -79,7 +79,7 @@ async function getRandomTopic() {
     const data = await res.json();
     
     if (!data.query || !data.query.categorymembers || data.query.categorymembers.length === 0) {
-        return "日本史"; 
+        return "日本の歴史"; 
     }
 
     const members = data.query.categorymembers;
@@ -166,3 +166,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadPreferences();
 });
+
