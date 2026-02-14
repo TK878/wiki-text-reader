@@ -1,5 +1,5 @@
 /**
- * History Full-Text Reader - Wikipedia Category-Based Logic
+ * History Full-Text Reader - Minimal Logic (Copy Button Removed)
  */
 
 // ========================================
@@ -43,6 +43,7 @@ function loadPreferences() {
 
 function updateStyle() {
     const textArea = document.getElementById('result');
+    if (!textArea) return;
     const fontSize = validateFontSize(document.getElementById('fontSize').value);
     const fontFamily = document.getElementById('fontFamily').value;
     textArea.style.fontSize = fontSize + 'px';
@@ -60,10 +61,9 @@ function fetchWithTimeout(url, timeout = CONFIG.API_TIMEOUT_MS) {
 }
 
 /**
- * 修正ポイント: 歴史に関連するカテゴリからランダムにタイトルを取得する
+ * ランダムに歴史カテゴリからタイトルを取得
  */
 async function getRandomTopic() {
-    // 取得したいカテゴリのリスト（ここを増やすとバリエーションが増える）
     const categories = ["歴史", "日本史", "世界史", "戦国武将", "フランスの歴史", "考古学"];
     const targetCat = categories[Math.floor(Math.random() * categories.length)];
 
@@ -77,17 +77,22 @@ async function getRandomTopic() {
 
     const res = await fetchWithTimeout(url.toString());
     const data = await res.json();
-    const members = data.query.categorymembers;
     
-    // 通常のページ（記事）だけをフィルタリング
+    if (!data.query || !data.query.categorymembers || data.query.categorymembers.length === 0) {
+        return "日本史"; 
+    }
+
+    const members = data.query.categorymembers;
+    // 標準的な記事（Namespace 0）のみを抽出
     const pages = members.filter(m => m.ns === 0);
     const randomPage = pages[Math.floor(Math.random() * pages.length)];
     
-    return randomPage ? randomPage.title : "日本の歴史"; // 万が一のフォールバック
+    return randomPage ? randomPage.title : "日本の歴史";
 }
 
-function updateUI(status, message = '') {
+function updateUI(status) {
     const statusText = document.getElementById('statusText');
+    if (!statusText) return;
     statusText.textContent = status.toUpperCase();
     statusText.className = ''; 
     statusText.classList.add('status-' + status.toLowerCase());
@@ -100,17 +105,21 @@ function updateUI(status, message = '') {
 async function fetchFullText() {
     const textArea = document.getElementById('result');
     const genBtn = document.getElementById('genBtn');
+    const charCountDisplay = document.getElementById('charCountDisplay');
 
+    if (!textArea || !genBtn) return;
+
+    // UI初期化
     genBtn.disabled = true;
-    textArea.value = "ランダムな歴史ワードを探索中...";
+    textArea.value = "検索中...";
+    updateUI('fetching');
 
     try {
-        // ステップ1: カテゴリからランダムにタイトルを取得
-        updateUI('fetching');
+        // ステップ1: ランダムキーワード取得
         const topic = await getRandomTopic();
-        textArea.value = `【${topic}】を取得しています...`;
+        textArea.value = `【${topic}】の詳細を読み込み中...`;
 
-        // ステップ2: そのタイトルの全文を取得
+        // ステップ2: Wikipedia全文取得
         const url = new URL(CONFIG.API_URL);
         url.searchParams.append('format', 'json');
         url.searchParams.append('action', 'query');
@@ -121,20 +130,22 @@ async function fetchFullText() {
 
         const response = await fetchWithTimeout(url.toString());
         const data = await response.json();
-        const pageId = Object.keys(data.query.pages)[0];
-        const fullText = data.query.pages[pageId].extract;
+        const pages = data.query.pages;
+        const pageId = Object.keys(pages)[0];
+        const fullText = pages[pageId].extract;
 
-        if (!fullText) throw new Error('内容が空でした');
+        if (!fullText) throw new Error('記事が空、または取得できませんでした');
 
         const content = `【主題: ${topic}】\n\n${fullText}`;
         textArea.value = content;
-        document.getElementById('charCountDisplay').textContent = `${content.length.toLocaleString()} chars`;
+        if (charCountDisplay) charCountDisplay.textContent = `${content.length.toLocaleString()} chars`;
 
         updateUI('complete');
         textArea.scrollTop = 0;
 
     } catch (error) {
-        textArea.value = "エラーが発生しました。再試行してください。\n" + error.message;
+        console.error(error);
+        textArea.value = "❌ エラーが発生しました。\n再試行してください: " + error.message;
         updateUI('error');
     } finally {
         genBtn.disabled = false;
@@ -145,12 +156,13 @@ async function fetchFullText() {
 // 初期化
 // ========================================
 document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('fontSize').addEventListener('change', updateStyle);
-    document.getElementById('fontFamily').addEventListener('change', updateStyle);
-    document.getElementById('genBtn').addEventListener('click', fetchFullText);
+    const fontSizeEl = document.getElementById('fontSize');
+    const fontFamilyEl = document.getElementById('fontFamily');
+    const genBtnEl = document.getElementById('genBtn');
+
+    if (fontSizeEl) fontSizeEl.addEventListener('change', updateStyle);
+    if (fontFamilyEl) fontFamilyEl.addEventListener('change', updateStyle);
+    if (genBtnEl) genBtnEl.addEventListener('click', fetchFullText);
 
     loadPreferences();
 });
-
-
-
