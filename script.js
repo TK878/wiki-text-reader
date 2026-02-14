@@ -100,10 +100,8 @@ function updateUI(status, message = '') {
 async function fetchFullText() {
     const textArea = document.getElementById('result');
     const genBtn = document.getElementById('genBtn');
-    const copyBtn = document.getElementById('copyBtn');
 
     genBtn.disabled = true;
-    copyBtn.classList.add('hidden');
     textArea.value = "ランダムな歴史ワードを探索中...";
 
     try {
@@ -134,7 +132,6 @@ async function fetchFullText() {
 
         updateUI('complete');
         textArea.scrollTop = 0;
-        copyBtn.classList.remove('hidden');
 
     } catch (error) {
         textArea.value = "エラーが発生しました。再試行してください。\n" + error.message;
@@ -144,17 +141,6 @@ async function fetchFullText() {
     }
 }
 
-async function copyText() {
-    const textArea = document.getElementById('result');
-    const copyBtn = document.getElementById('copyBtn');
-    try {
-        await navigator.clipboard.writeText(textArea.value);
-        const originalText = copyBtn.textContent;
-        copyBtn.textContent = '✓ Copied';
-        setTimeout(() => { copyBtn.textContent = originalText; }, 2000);
-    } catch (e) { alert('コピー失敗'); }
-}
-
 // ========================================
 // 初期化
 // ========================================
@@ -162,9 +148,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('fontSize').addEventListener('change', updateStyle);
     document.getElementById('fontFamily').addEventListener('change', updateStyle);
     document.getElementById('genBtn').addEventListener('click', fetchFullText);
-    document.getElementById('copyBtn').addEventListener('click', copyText);
 
     loadPreferences();
 });
+
 
 
