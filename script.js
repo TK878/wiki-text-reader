@@ -1,5 +1,5 @@
 /**
- * History Full-Text Reader - Dynamic Category Crawling Logic
+ * History Full-Text Reader - Dynamic Category Crawling Logic (Fixed)
  */
 
 // ========================================
@@ -63,10 +63,12 @@ function fetchWithTimeout(url, timeout = CONFIG.API_TIMEOUT_MS) {
 /**
  * 【大幅変更箇所】
  * 「Category:歴史」から再帰的に下位カテゴリを辿り、最終的なキーワードを抽出する
+ * ランダムな開始文字を追加して多様性を確保
  */
 async function getRandomTopic() {
+    // 起点となるカテゴリ（確実に存在するものを指定）
     let targetCat = "歴史";
-    const maxDepth = 2; // 潜る深さ（2〜3回が歴史から逸脱せず多様性を保つのに最適）
+    const maxDepth = 2; // 潜る深さ
 
     // 1. 再帰的に下位カテゴリをランダムに辿る
     for (let i = 0; i < maxDepth; i++) {
@@ -76,25 +78,39 @@ async function getRandomTopic() {
         subCatUrl.searchParams.append('list', 'categorymembers');
         subCatUrl.searchParams.append('cmtitle', 'Category:' + targetCat);
         subCatUrl.searchParams.append('cmtype', 'subcat'); // 子カテゴリのみ
-        subCatUrl.searchParams.append('cmlimit', '40');
+        subCatUrl.searchParams.append('cmlimit', '50'); // 取得数を少し増やす
         subCatUrl.searchParams.append('origin', '*');
 
-        const res = await fetchWithTimeout(subCatUrl.toString());
-        const data = await res.json();
-        const subCats = data.query.categorymembers;
+        try {
+            const res = await fetchWithTimeout(subCatUrl.toString());
+            const data = await res.json();
+            const subCats = data.query ? data.query.categorymembers : [];
 
-        if (subCats && subCats.length > 0) {
-            // スタブカテゴリや管理用カテゴリを除外する簡易フィルタ
-            const filtered = subCats.filter(c => !c.title.includes('スタブ') && !c.title.includes('画像') && !c.title.includes('テンプレート'));
-            const pool = filtered.length > 0 ? filtered : subCats;
-            // ランダムに1つ選んで次の深さの起点にする
-            targetCat = pool[Math.floor(Math.random() * pool.length)].title.replace(/^Category:/, "");
-        } else {
-            break; // 下位がなければ現在のカテゴリで確定
+            if (subCats && subCats.length > 0) {
+                // スタブカテゴリや管理用カテゴリを除外する簡易フィルタ
+                const filtered = subCats.filter(c => 
+                    !c.title.includes('スタブ') && 
+                    !c.title.includes('画像') && 
+                    !c.title.includes('テンプレート') &&
+                    !c.title.includes('ウィキ') &&
+                    !c.title.includes('Wikipedia')
+                );
+                
+                const pool = filtered.length > 0 ? filtered : subCats;
+                // ランダムに1つ選んで次の深さの起点にする
+                const nextCat = pool[Math.floor(Math.random() * pool.length)];
+                targetCat = nextCat.title.replace(/^Category:/, "");
+            } else {
+                break; // 下位がなければ現在のカテゴリで確定
+            }
+        } catch (e) {
+            console.warn(`サブカテゴリ取得失敗: ${targetCat}`, e);
+            break; // エラーなら現状維持で進む
         }
     }
 
     // 2. 確定したカテゴリからランダムな文字位置で記事を取得
+    // 「あ～わ」「A～Z」などをランダムに選定
     const chars = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわABCDE";
     const randomStart = chars[Math.floor(Math.random() * chars.length)];
 
@@ -103,7 +119,7 @@ async function getRandomTopic() {
     url.searchParams.append('action', 'query');
     url.searchParams.append('list', 'categorymembers');
     url.searchParams.append('cmtitle', 'Category:' + targetCat);
-    url.searchParams.append('cmstartsortkeyprefix', randomStart); 
+    url.searchParams.append('cmstartsortkeyprefix', randomStart); // ランダム開始位置
     url.searchParams.append('cmlimit', '100');
     url.searchParams.append('origin', '*');
 
@@ -111,14 +127,36 @@ async function getRandomTopic() {
     const data = await res.json();
     
     if (!data.query || !data.query.categorymembers || data.query.categorymembers.length === 0) {
-        throw new Error(`カテゴリ ${targetCat} のリスト取得に失敗`);
+        // ランダム開始位置でヒットしなかった場合、開始位置指定なしで再トライ
+        // (カテゴリ自体は存在するが、指定した文字から始まる記事がない場合のため)
+        const fallbackUrl = new URL(CONFIG.API_URL);
+        fallbackUrl.searchParams.append('format', 'json');
+        fallbackUrl.searchParams.append('action', 'query');
+        fallbackUrl.searchParams.append('list', 'categorymembers');
+        fallbackUrl.searchParams.append('cmtitle', 'Category:' + targetCat);
+        fallbackUrl.searchParams.append('cmlimit', '100');
+        fallbackUrl.searchParams.append('origin', '*');
+        
+        const fallbackRes = await fetchWithTimeout(fallbackUrl.toString());
+        const fallbackData = await fallbackRes.json();
+        
+        if (!fallbackData.query || !fallbackData.query.categorymembers || fallbackData.query.categorymembers.length === 0) {
+             throw new Error(`カテゴリ【${targetCat}】の記事リスト取得に失敗しました`);
+        }
+        
+        const members = fallbackData.query.categorymembers;
+        const pages = members.filter(m => m.ns === 0);
+        if (pages.length === 0) throw new Error(`カテゴリ【${targetCat}】内に記事が見つかりませんでした`);
+        const randomPage = pages[Math.floor(Math.random() * pages.length)];
+        return { title: randomPage.title, category: targetCat };
     }
 
     const members = data.query.categorymembers;
     const pages = members.filter(m => m.ns === 0);
     
     if (pages.length === 0) {
-        throw new Error(`カテゴリ ${targetCat} 内に記事なし`);
+        // ランダム開始位置では記事が見つからなかった（サブカテゴリしかなかった等）場合
+        throw new Error(`カテゴリ【${targetCat}】内の検索位置に記事がありませんでした`);
     }
 
     const randomPage = pages[Math.floor(Math.random() * pages.length)];
@@ -162,7 +200,7 @@ async function fetchFullText() {
                 category = result.category;
             } else {
                 topic = "日本の歴史";
-                category = "最終フォールバック";
+                category = "";
             }
 
             const retryLabel = retryCount > 0 ? `再試行中(${retryCount}/${maxRetries}): ` : "";
