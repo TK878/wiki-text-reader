@@ -62,9 +62,9 @@ function fetchWithTimeout(url, timeout = CONFIG.API_TIMEOUT_MS) {
 
 /**
  * ランダムに歴史カテゴリからタイトルを取得
+ * 修正：内部でのフォールバックを廃止し、失敗時はエラーを投げてリトライさせる
  */
 async function getRandomTopic() {
-    // 正確なカテゴリ名「日本の歴史」に修正。また、ヒット率を上げるため項目を追加。
     const categories = ["歴史", "日本の歴史", "世界史", "戦国武将", "フランスの歴史", "考古学"];
     const targetCat = categories[Math.floor(Math.random() * categories.length)];
 
@@ -80,18 +80,18 @@ async function getRandomTopic() {
     const data = await res.json();
     
     if (!data.query || !data.query.categorymembers || data.query.categorymembers.length === 0) {
-        return "日本の歴史"; 
+        throw new Error(`カテゴリ ${targetCat} のリスト取得に失敗しました`);
     }
 
     const members = data.query.categorymembers;
-    // 標準的な記事（Namespace 0）のみを抽出
     const pages = members.filter(m => m.ns === 0);
     
-    // 記事が空だった場合も考慮して安全に返す
-    if (pages.length === 0) return "日本の歴史";
+    if (pages.length === 0) {
+        throw new Error(`カテゴリ ${targetCat} 内に有効な記事が見つかりませんでした`);
+    }
 
     const randomPage = pages[Math.floor(Math.random() * pages.length)];
-    return randomPage ? randomPage.title : "日本の歴史";
+    return randomPage.title;
 }
 
 function updateUI(status) {
@@ -118,13 +118,19 @@ async function fetchFullText() {
     updateUI('fetching');
 
     let retryCount = 0;
-    const maxRetries = 3;
+    const maxRetries = 3; // 最大3回のリトライ（合計4回目の試行が最終手段）
     let success = false;
 
     while (retryCount <= maxRetries && !success) {
         try {
-            // 4回目（リトライ3回失敗後）は強制的に「日本の歴史」にする
-            const topic = (retryCount === maxRetries) ? "日本の歴史" : await getRandomTopic();
+            let topic;
+            // 3回リトライしてもダメだった場合（4回目のループ）のみ固定ワードを使用
+            if (retryCount < maxRetries) {
+                topic = await getRandomTopic();
+            } else {
+                topic = "日本の歴史";
+            }
+
             textArea.value = (retryCount > 0) 
                 ? `再試行中(${retryCount}/${maxRetries}): 【${topic}】の詳細を読み込み中...`
                 : `【${topic}】の詳細を読み込み中...`;
@@ -142,10 +148,10 @@ async function fetchFullText() {
             const pages = data.query.pages;
             const pageId = Object.keys(pages)[0];
             
-            if (pageId === "-1") throw new Error('記事が見つかりませんでした');
+            if (pageId === "-1") throw new Error('Wikipediaに該当記事がありません');
             
             const fullText = pages[pageId].extract;
-            if (!fullText) throw new Error('内容が空でした');
+            if (!fullText) throw new Error('記事の内容が空です');
 
             const content = `【主題: ${topic}】\n\n${fullText}`;
             textArea.value = content;
@@ -156,15 +162,16 @@ async function fetchFullText() {
             success = true;
 
         } catch (error) {
-            console.warn(`Attempt ${retryCount + 1} failed: ${error.message}`);
+            console.warn(`試行 ${retryCount + 1} 回目が失敗: ${error.message}`);
             retryCount++;
             
             if (retryCount > maxRetries) {
-                textArea.value = "❌ 複数回試行しましたがエラーが発生しました。\n最終エラー: " + error.message;
+                textArea.value = "❌ 規定回数の試行を終えましたが取得できませんでした。\n最終エラー: " + error.message;
                 updateUI('error');
+            } else {
+                // 次のリトライへ（APIへの連続負荷を避けるため300ms待機）
+                await new Promise(resolve => setTimeout(resolve, 300));
             }
-            // 少し待機してからリトライ（API負荷軽減）
-            await new Promise(resolve => setTimeout(resolve, 300));
         }
     }
     genBtn.disabled = false;
