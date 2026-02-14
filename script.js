@@ -1,5 +1,5 @@
 /**
- * History Full-Text Reader - Robust Version
+ * Sengoku Warlord Reader - Standard Logic
  */
 
 // ========================================
@@ -11,7 +11,7 @@ const CONFIG = {
     FONT_SIZE_DEFAULT: 14,
     API_TIMEOUT_MS: 15000,
     API_URL: 'https://ja.wikipedia.org/w/api.php',
-    STORAGE_KEY_PREFIX: 'historyReader_'
+    STORAGE_KEY_PREFIX: 'sengokuReader_'
 };
 
 // ========================================
@@ -61,46 +61,48 @@ function fetchWithTimeout(url, timeout = CONFIG.API_TIMEOUT_MS) {
 }
 
 /**
- * 【修正箇所】Wikipediaの実際のカテゴリ構造に基づいた探索ロジック
+ * 戦国武将カテゴリからランダムに取得
  */
 async function getRandomTopic() {
-    // 確実に存在する高レベルカテゴリ（種）
+    // 検索の起点カテゴリ
     const seedCategories = [
-        "日本の歴史", "世界史", "中国史", "朝鮮の歴史", "東南アジア史", "中東史", 
-        "ヨーロッパ史", "アメリカ合衆国の歴史", "アフリカ史", "ラテンアメリカ史", "オセアニア史",
-        "軍事史", "海事史", "経済史", "文化史", "宗教史", "古代ギリシア", "古代ローマ"
+        "戦国武将"
     ];
     
     let currentCat = seedCategories[Math.floor(Math.random() * seedCategories.length)];
     let catUsed = currentCat;
 
-    // 1. 再帰的に下位カテゴリを辿る（最大2回）
-    for (let depth = 0; depth < 2; depth++) {
-        const subCatUrl = `${CONFIG.API_URL}?action=query&list=categorymembers&cmtitle=Category:${encodeURIComponent(currentCat)}&cmtype=subcat&cmlimit=30&format=json&origin=*`;
-        try {
-            const res = await fetchWithTimeout(subCatUrl);
-            const data = await res.json();
-            const subCats = data.query?.categorymembers || [];
-            
-            if (subCats.length > 0) {
-                const filtered = subCats.filter(c => 
-                    !["スタブ", "画像", "テンプレート", "Wikipedia", "一覧", "カテゴリ"].some(word => c.title.includes(word))
-                );
-                if (filtered.length > 0) {
-                    currentCat = filtered[Math.floor(Math.random() * filtered.length)].title.replace("Category:", "");
-                    catUsed = currentCat;
+    // 1. 下位カテゴリを浅く探索 (maxDepth=1)
+    // 深すぎると人物以外（城、合戦など）が混ざるため制限
+    for (let depth = 0; depth < 1; depth++) {
+        // 50%の確率で下位カテゴリへ
+        if (Math.random() > 0.5) {
+            const subCatUrl = `${CONFIG.API_URL}?action=query&list=categorymembers&cmtitle=Category:${encodeURIComponent(currentCat)}&cmtype=subcat&cmlimit=50&format=json&origin=*`;
+            try {
+                const res = await fetchWithTimeout(subCatUrl);
+                const data = await res.json();
+                const subCats = data.query?.categorymembers || [];
+                
+                if (subCats.length > 0) {
+                    const filtered = subCats.filter(c => 
+                        !["スタブ", "画像", "テンプレート", "Wikipedia", "一覧", "カテゴリ", "作品", "ゲーム"].some(word => c.title.includes(word))
+                    );
+                    if (filtered.length > 0) {
+                        currentCat = filtered[Math.floor(Math.random() * filtered.length)].title.replace("Category:", "");
+                        catUsed = currentCat;
+                    }
                 }
-            }
-        } catch (e) { break; }
+            } catch (e) { break; }
+        }
     }
 
     // 2. 記事取得時のランダム開始位置設定
-    const chars = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわABCDE";
+    const chars = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわ";
     const randomChar = chars[Math.floor(Math.random() * chars.length)];
     
     let members = [];
     
-    // 方法A: ランダム開始位置で取得を試みる
+    // 方法A: ランダム開始位置で取得
     const urlA = `${CONFIG.API_URL}?action=query&list=categorymembers&cmtitle=Category:${encodeURIComponent(currentCat)}&cmtype=page&cmstartsortkeyprefix=${encodeURIComponent(randomChar)}&cmlimit=50&format=json&origin=*`;
     try {
         const resA = await fetchWithTimeout(urlA);
@@ -119,7 +121,7 @@ async function getRandomTopic() {
     }
 
     if (members.length === 0) {
-        throw new Error(`カテゴリ【${currentCat}】に有効な記事が見つかりませんでした`);
+        throw new Error(`カテゴリ【${currentCat}】に記事が見つかりませんでした`);
     }
 
     const randomPage = members[Math.floor(Math.random() * members.length)];
@@ -146,7 +148,7 @@ async function fetchFullText() {
     if (!textArea || !genBtn) return;
 
     genBtn.disabled = true;
-    textArea.value = "検索開始...";
+    textArea.value = "検索中...";
     updateUI('fetching');
 
     let retryCount = 0;
@@ -159,14 +161,14 @@ async function fetchFullText() {
             if (retryCount < maxRetries) {
                 topicInfo = await getRandomTopic();
             } else {
-                topicInfo = { title: "日本の歴史", category: "最終手段" };
+                topicInfo = { title: "織田信長", category: "最終手段" };
             }
 
             const { title: topic, category } = topicInfo;
             const retryLabel = retryCount > 0 ? `再試行中(${retryCount}/${maxRetries}): ` : "";
             textArea.value = `${retryLabel}カテゴリ【${category}】から\n【${topic}】を取得しています...`;
 
-            // 本文取得API（redirects=1 を追加してリダイレクトを解決）
+            // 本文取得API
             const url = `${CONFIG.API_URL}?action=query&prop=extracts&explaintext=1&titles=${encodeURIComponent(topic)}&redirects=1&format=json&origin=*`;
 
             const response = await fetchWithTimeout(url);
