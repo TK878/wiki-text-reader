@@ -1,5 +1,5 @@
 /**
- * History Full-Text Reader - NDC Optimized & Category Fix
+ * History Full-Text Reader - Robust Version
  */
 
 // ========================================
@@ -61,102 +61,69 @@ function fetchWithTimeout(url, timeout = CONFIG.API_TIMEOUT_MS) {
 }
 
 /**
- * 【修正箇所】Wikipediaの実際のカテゴリ名に最適化したNDCリスト
+ * 【修正箇所】Wikipediaの実際のカテゴリ構造に基づいた探索ロジック
  */
 async function getRandomTopic() {
-    const categories = [
-        "歴史", "世界史", "日本の歴史", 
-        "北海道の歴史", "東北地方の歴史", "関東地方の歴史", "北陸地方の歴史", 
-        "中部地方の歴史", "近畿地方の歴史", "中国地方の歴史", "四国地方の歴史", "九州地方の歴史",
-        "アジア史", "朝鮮の歴史", "中国の歴史", "東南アジア史", "インドネシアの歴史", "インドの歴史", "中東史", 
-        "ヨーロッパ史", "古代ギリシア", "古代ローマ", "イギリスの歴史", "ドイツの歴史", "フランスの歴史", "スペインの歴史", "イタリアの歴史", "ロシアの歴史", "バルカン半島の歴史",
-        "アフリカ史", "北アフリカ史", "エジプトの歴史", "南アフリカ共和国の歴史", 
-        "北アメリカの歴史", "カナダの歴史", "アメリカ合衆国の歴史", 
-        "ラテンアメリカ史", "メキシコの歴史", "中央アメリカ史", "南アメリカ史", "ブラジルの歴史", "アルゼンチンの歴史",
-        "オセアニア史", "オーストラリアの歴史", "ニュージーランドの歴史", "ハワイ州の歴史",
-        "海事史"
+    // 確実に存在する高レベルカテゴリ（種）
+    const seedCategories = [
+        "日本の歴史", "世界史", "中国史", "朝鮮の歴史", "東南アジア史", "中東史", 
+        "ヨーロッパ史", "アメリカ合衆国の歴史", "アフリカ史", "ラテンアメリカ史", "オセアニア史",
+        "軍事史", "海事史", "経済史", "文化史", "宗教史", "古代ギリシア", "古代ローマ"
     ];
     
-    let targetCat = categories[Math.floor(Math.random() * categories.length)];
-    const maxDepth = 2; 
+    let currentCat = seedCategories[Math.floor(Math.random() * seedCategories.length)];
+    let catUsed = currentCat;
 
-    // 1. 再帰的に下位カテゴリを辿る
-    for (let i = 0; i < maxDepth; i++) {
-        const subCatUrl = new URL(CONFIG.API_URL);
-        subCatUrl.searchParams.append('format', 'json');
-        subCatUrl.searchParams.append('action', 'query');
-        subCatUrl.searchParams.append('list', 'categorymembers');
-        subCatUrl.searchParams.append('cmtitle', 'Category:' + targetCat);
-        subCatUrl.searchParams.append('cmtype', 'subcat'); 
-        subCatUrl.searchParams.append('cmlimit', '50');
-        subCatUrl.searchParams.append('origin', '*');
-
+    // 1. 再帰的に下位カテゴリを辿る（最大2回）
+    for (let depth = 0; depth < 2; depth++) {
+        const subCatUrl = `${CONFIG.API_URL}?action=query&list=categorymembers&cmtitle=Category:${encodeURIComponent(currentCat)}&cmtype=subcat&cmlimit=30&format=json&origin=*`;
         try {
-            const res = await fetchWithTimeout(subCatUrl.toString());
+            const res = await fetchWithTimeout(subCatUrl);
             const data = await res.json();
-            const subCats = data.query ? data.query.categorymembers : [];
-
-            if (subCats && subCats.length > 0) {
+            const subCats = data.query?.categorymembers || [];
+            
+            if (subCats.length > 0) {
                 const filtered = subCats.filter(c => 
-                    !c.title.includes('スタブ') && 
-                    !c.title.includes('画像') && 
-                    !c.title.includes('テンプレート') &&
-                    !c.title.includes('Wikipedia') &&
-                    !c.title.includes('カテゴリ')
+                    !["スタブ", "画像", "テンプレート", "Wikipedia", "一覧", "カテゴリ"].some(word => c.title.includes(word))
                 );
-                
                 if (filtered.length > 0) {
-                    const nextCat = filtered[Math.floor(Math.random() * filtered.length)];
-                    targetCat = nextCat.title.replace(/^Category:/, "");
+                    currentCat = filtered[Math.floor(Math.random() * filtered.length)].title.replace("Category:", "");
+                    catUsed = currentCat;
                 }
-            } else {
-                break; 
             }
-        } catch (e) {
-            break; 
-        }
+        } catch (e) { break; }
     }
 
     // 2. 記事取得時のランダム開始位置設定
     const chars = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわABCDE";
-    const randomStart = chars[Math.floor(Math.random() * chars.length)];
-
-    const url = new URL(CONFIG.API_URL);
-    url.searchParams.append('format', 'json');
-    url.searchParams.append('action', 'query');
-    url.searchParams.append('list', 'categorymembers');
-    url.searchParams.append('cmtitle', 'Category:' + targetCat);
-    url.searchParams.append('cmstartsortkeyprefix', randomStart); // ランダム開始
-    url.searchParams.append('cmlimit', '100');
-    url.searchParams.append('origin', '*');
-
-    const res = await fetchWithTimeout(url.toString());
-    const data = await res.json();
+    const randomChar = chars[Math.floor(Math.random() * chars.length)];
     
-    // ヒットしなかった場合のセーフティ
-    let members = (data.query && data.query.categorymembers) ? data.query.categorymembers : [];
+    let members = [];
     
+    // 方法A: ランダム開始位置で取得を試みる
+    const urlA = `${CONFIG.API_URL}?action=query&list=categorymembers&cmtitle=Category:${encodeURIComponent(currentCat)}&cmtype=page&cmstartsortkeyprefix=${encodeURIComponent(randomChar)}&cmlimit=50&format=json&origin=*`;
+    try {
+        const resA = await fetchWithTimeout(urlA);
+        const dataA = await resA.json();
+        members = (dataA.query?.categorymembers || []).filter(m => m.ns === 0);
+    } catch (e) {}
+
+    // 方法B: Aが空なら開始位置なしで再取得
     if (members.length === 0) {
-        // 開始位置指定なしで再取得
-        const retryUrl = new URL(CONFIG.API_URL);
-        retryUrl.searchParams.append('format', 'json');
-        retryUrl.searchParams.append('action', 'query');
-        retryUrl.searchParams.append('list', 'categorymembers');
-        retryUrl.searchParams.append('cmtitle', 'Category:' + targetCat);
-        retryUrl.searchParams.append('cmlimit', '100');
-        retryUrl.searchParams.append('origin', '*');
-        const retryRes = await fetchWithTimeout(retryUrl.toString());
-        const retryData = await retryRes.json();
-        members = retryData.query ? retryData.query.categorymembers : [];
+        const urlB = `${CONFIG.API_URL}?action=query&list=categorymembers&cmtitle=Category:${encodeURIComponent(currentCat)}&cmtype=page&cmlimit=50&format=json&origin=*`;
+        try {
+            const resB = await fetchWithTimeout(urlB);
+            const dataB = await resB.json();
+            members = (dataB.query?.categorymembers || []).filter(m => m.ns === 0);
+        } catch (e) {}
     }
 
-    const pages = members.filter(m => m.ns === 0);
-    if (pages.length === 0) {
-        throw new Error(`カテゴリ【${targetCat}】の記事取得に失敗`);
+    if (members.length === 0) {
+        throw new Error(`カテゴリ【${currentCat}】に有効な記事が見つかりませんでした`);
     }
 
-    const randomPage = pages[Math.floor(Math.random() * pages.length)];
-    return { title: randomPage.title, category: targetCat };
+    const randomPage = members[Math.floor(Math.random() * members.length)];
+    return { title: randomPage.title, category: catUsed };
 }
 
 function updateUI(status) {
@@ -188,29 +155,21 @@ async function fetchFullText() {
 
     while (retryCount <= maxRetries && !success) {
         try {
-            let topic, category;
-
+            let topicInfo;
             if (retryCount < maxRetries) {
-                const result = await getRandomTopic();
-                topic = result.title;
-                category = result.category;
+                topicInfo = await getRandomTopic();
             } else {
-                topic = "日本の歴史";
-                category = "";
+                topicInfo = { title: "日本の歴史", category: "最終手段" };
             }
 
+            const { title: topic, category } = topicInfo;
             const retryLabel = retryCount > 0 ? `再試行中(${retryCount}/${maxRetries}): ` : "";
             textArea.value = `${retryLabel}カテゴリ【${category}】から\n【${topic}】を取得しています...`;
 
-            const url = new URL(CONFIG.API_URL);
-            url.searchParams.append('format', 'json');
-            url.searchParams.append('action', 'query');
-            url.searchParams.append('prop', 'extracts');
-            url.searchParams.append('explaintext', '1');
-            url.searchParams.append('titles', topic);
-            url.searchParams.append('origin', '*');
+            // 本文取得API（redirects=1 を追加してリダイレクトを解決）
+            const url = `${CONFIG.API_URL}?action=query&prop=extracts&explaintext=1&titles=${encodeURIComponent(topic)}&redirects=1&format=json&origin=*`;
 
-            const response = await fetchWithTimeout(url.toString());
+            const response = await fetchWithTimeout(url);
             const data = await response.json();
             const pages = data.query.pages;
             const pageId = Object.keys(pages)[0];
@@ -218,7 +177,9 @@ async function fetchFullText() {
             if (pageId === "-1") throw new Error('該当記事なし');
             
             const fullText = pages[pageId].extract;
-            if (!fullText) throw new Error('内容が空');
+            if (!fullText || fullText.trim().length === 0) {
+                throw new Error('内容が空でした');
+            }
 
             const content = `【主題: ${topic}】\n(カテゴリ: ${category})\n\n${fullText}`;
             textArea.value = content;
