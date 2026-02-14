@@ -134,7 +134,7 @@ async function fetchFullText() {
             } else {
                 // 最終リトライ（4回目）
                 topic = "日本の歴史";
-                category = "最終フォールバック";
+                category = "";
             }
 
             // 画面表示を更新（カテゴリ名を含める）
@@ -196,3 +196,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadPreferences();
 });
+
