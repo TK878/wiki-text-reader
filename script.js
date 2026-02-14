@@ -1,5 +1,5 @@
 /**
- * Sengoku Warlord Reader - Standard Logic
+ * Sengoku Warlord Reader - Fixed Category (No Recursion)
  */
 
 // ========================================
@@ -62,41 +62,17 @@ function fetchWithTimeout(url, timeout = CONFIG.API_TIMEOUT_MS) {
 
 /**
  * 戦国武将カテゴリからランダムに取得
+ * ※再帰探索を廃止し、カテゴリを固定
  */
 async function getRandomTopic() {
-    // 検索の起点カテゴリ
-    const seedCategories = [
-        "戦国武将"
-    ];
-    
-    let currentCat = seedCategories[Math.floor(Math.random() * seedCategories.length)];
-    let catUsed = currentCat;
+    // 1. カテゴリを「戦国武将」に完全固定
+    const currentCat = "戦国武将";
+    const catUsed = currentCat;
 
-    // 1. 下位カテゴリを浅く探索 (maxDepth=1)
-    // 深すぎると人物以外（城、合戦など）が混ざるため制限
-    for (let depth = 0; depth < 1; depth++) {
-        // 50%の確率で下位カテゴリへ
-        if (Math.random() > 0.5) {
-            const subCatUrl = `${CONFIG.API_URL}?action=query&list=categorymembers&cmtitle=Category:${encodeURIComponent(currentCat)}&cmtype=subcat&cmlimit=50&format=json&origin=*`;
-            try {
-                const res = await fetchWithTimeout(subCatUrl);
-                const data = await res.json();
-                const subCats = data.query?.categorymembers || [];
-                
-                if (subCats.length > 0) {
-                    const filtered = subCats.filter(c => 
-                        !["スタブ", "画像", "テンプレート", "Wikipedia", "一覧", "カテゴリ", "作品", "ゲーム"].some(word => c.title.includes(word))
-                    );
-                    if (filtered.length > 0) {
-                        currentCat = filtered[Math.floor(Math.random() * filtered.length)].title.replace("Category:", "");
-                        catUsed = currentCat;
-                    }
-                }
-            } catch (e) { break; }
-        }
-    }
+    // ※以前の「下位カテゴリ探索ループ」を削除しました。
 
     // 2. 記事取得時のランダム開始位置設定
+    // カテゴリ内の記事数が非常に多いため、開始文字をランダムにしてバラつきを出す
     const chars = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわ";
     const randomChar = chars[Math.floor(Math.random() * chars.length)];
     
@@ -110,7 +86,7 @@ async function getRandomTopic() {
         members = (dataA.query?.categorymembers || []).filter(m => m.ns === 0);
     } catch (e) {}
 
-    // 方法B: Aが空なら開始位置なしで再取得
+    // 方法B: Aが空なら開始位置なしで再取得（念のため）
     if (members.length === 0) {
         const urlB = `${CONFIG.API_URL}?action=query&list=categorymembers&cmtitle=Category:${encodeURIComponent(currentCat)}&cmtype=page&cmlimit=50&format=json&origin=*`;
         try {
@@ -219,4 +195,3 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadPreferences();
 });
-
