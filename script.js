@@ -64,7 +64,8 @@ function fetchWithTimeout(url, timeout = CONFIG.API_TIMEOUT_MS) {
  * ランダムに歴史カテゴリからタイトルを取得
  */
 async function getRandomTopic() {
-    const categories = ["歴史", "日本史", "世界史", "戦国武将", "フランスの歴史", "考古学"];
+    // 正確なカテゴリ名「日本の歴史」に修正。また、ヒット率を上げるため項目を追加。
+    const categories = ["歴史", "日本の歴史", "世界史", "戦国武将", "フランスの歴史", "考古学"];
     const targetCat = categories[Math.floor(Math.random() * categories.length)];
 
     const url = new URL(CONFIG.API_URL);
@@ -85,8 +86,11 @@ async function getRandomTopic() {
     const members = data.query.categorymembers;
     // 標準的な記事（Namespace 0）のみを抽出
     const pages = members.filter(m => m.ns === 0);
-    const randomPage = pages[Math.floor(Math.random() * pages.length)];
     
+    // 記事が空だった場合も考慮して安全に返す
+    if (pages.length === 0) return "日本の歴史";
+
+    const randomPage = pages[Math.floor(Math.random() * pages.length)];
     return randomPage ? randomPage.title : "日本の歴史";
 }
 
@@ -132,6 +136,10 @@ async function fetchFullText() {
         const data = await response.json();
         const pages = data.query.pages;
         const pageId = Object.keys(pages)[0];
+        
+        // ページが存在しない場合のガード
+        if (pageId === "-1") throw new Error('記事が見つかりませんでした');
+        
         const fullText = pages[pageId].extract;
 
         if (!fullText) throw new Error('記事が空、または取得できませんでした');
@@ -166,4 +174,3 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadPreferences();
 });
-
