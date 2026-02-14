@@ -83,7 +83,7 @@ async function getRandomTopic() {
     const pages = members.filter(m => m.ns === 0);
     const randomPage = pages[Math.floor(Math.random() * pages.length)];
     
-    return randomPage ? randomPage.title : "日本史"; // 万が一のフォールバック
+    return randomPage ? randomPage.title : "日本の歴史"; // 万が一のフォールバック
 }
 
 function updateUI(status, message = '') {
@@ -166,3 +166,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadPreferences();
 });
+
