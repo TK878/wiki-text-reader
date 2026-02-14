@@ -1,5 +1,5 @@
 /**
- * History Full-Text Reader - Dynamic Category Crawling Logic (Fixed)
+ * History Full-Text Reader - NDC (Nippon Decimal Classification) Based Logic
  */
 
 // ========================================
@@ -61,14 +61,26 @@ function fetchWithTimeout(url, timeout = CONFIG.API_TIMEOUT_MS) {
 }
 
 /**
- * 【大幅変更箇所】
- * 「Category:歴史」から再帰的に下位カテゴリを辿り、最終的なキーワードを抽出する
- * ランダムな開始文字を追加して多様性を確保
+ * 【NDC体系に基づくカテゴリ探索】
+ * ご提示いただいたリストに基づき、Wikipediaの膨大な歴史カテゴリを掘り下げる
  */
 async function getRandomTopic() {
-    // 起点となるカテゴリ（確実に存在するものを指定）
-    let targetCat = "歴史";
-    const maxDepth = 2; // 潜る深さ
+    // 日本十進分類法（NDC）の歴史項目に基づいたシードカテゴリ
+    const categories = [
+        "歴史", "世界史", "日本の歴史", 
+        "北海道地方の歴史", "東北地方の歴史", "関東地方の歴史", "北陸地方の歴史", 
+        "中部地方の歴史", "近畿地方の歴史", "中国地方の歴史", "四国地方の歴史", "九州地方の歴史",
+        "アジアの歴史", "朝鮮の歴史", "中国の歴史", "東南アジアの歴史", "インドネシアの歴史", "インドの歴史", "中東の歴史", 
+        "ヨーロッパの歴史", "古代ギリシア", "古代ローマ", "イギリスの歴史", "ドイツの歴史", "フランスの歴史", "スペインの歴史", "イタリアの歴史", "ロシアの歴史", "バルカン半島の歴史",
+        "アフリカの歴史", "北アフリカの歴史", "エジプトの歴史", "南アフリカの歴史", 
+        "北アメリカの歴史", "カナダの歴史", "アメリカ合衆国の歴史", 
+        "ラテンアメリカの歴史", "メキシコの歴史", "中央アメリカの歴史", "南アメリカの歴史", "ブラジルの歴史", "アルゼンチンの歴史",
+        "オセアニアの歴史", "オーストラリアの歴史", "ニュージーランドの歴史", "ハワイの歴史",
+        "伝記", "個人伝記", "地誌", "海洋の歴史"
+    ];
+    
+    let targetCat = categories[Math.floor(Math.random() * categories.length)];
+    const maxDepth = 2; // 下位カテゴリへ潜る深さ
 
     // 1. 再帰的に下位カテゴリをランダムに辿る
     for (let i = 0; i < maxDepth; i++) {
@@ -77,8 +89,8 @@ async function getRandomTopic() {
         subCatUrl.searchParams.append('action', 'query');
         subCatUrl.searchParams.append('list', 'categorymembers');
         subCatUrl.searchParams.append('cmtitle', 'Category:' + targetCat);
-        subCatUrl.searchParams.append('cmtype', 'subcat'); // 子カテゴリのみ
-        subCatUrl.searchParams.append('cmlimit', '50'); // 取得数を少し増やす
+        subCatUrl.searchParams.append('cmtype', 'subcat'); 
+        subCatUrl.searchParams.append('cmlimit', '50');
         subCatUrl.searchParams.append('origin', '*');
 
         try {
@@ -87,30 +99,28 @@ async function getRandomTopic() {
             const subCats = data.query ? data.query.categorymembers : [];
 
             if (subCats && subCats.length > 0) {
-                // スタブカテゴリや管理用カテゴリを除外する簡易フィルタ
                 const filtered = subCats.filter(c => 
                     !c.title.includes('スタブ') && 
                     !c.title.includes('画像') && 
                     !c.title.includes('テンプレート') &&
                     !c.title.includes('ウィキ') &&
-                    !c.title.includes('Wikipedia')
+                    !c.title.includes('Wikipedia') &&
+                    !c.title.includes('カテゴリ')
                 );
                 
                 const pool = filtered.length > 0 ? filtered : subCats;
-                // ランダムに1つ選んで次の深さの起点にする
                 const nextCat = pool[Math.floor(Math.random() * pool.length)];
                 targetCat = nextCat.title.replace(/^Category:/, "");
             } else {
-                break; // 下位がなければ現在のカテゴリで確定
+                break; 
             }
         } catch (e) {
             console.warn(`サブカテゴリ取得失敗: ${targetCat}`, e);
-            break; // エラーなら現状維持で進む
+            break; 
         }
     }
 
     // 2. 確定したカテゴリからランダムな文字位置で記事を取得
-    // 「あ～わ」「A～Z」などをランダムに選定
     const chars = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわABCDE";
     const randomStart = chars[Math.floor(Math.random() * chars.length)];
 
@@ -119,16 +129,15 @@ async function getRandomTopic() {
     url.searchParams.append('action', 'query');
     url.searchParams.append('list', 'categorymembers');
     url.searchParams.append('cmtitle', 'Category:' + targetCat);
-    url.searchParams.append('cmstartsortkeyprefix', randomStart); // ランダム開始位置
+    url.searchParams.append('cmstartsortkeyprefix', randomStart); 
     url.searchParams.append('cmlimit', '100');
     url.searchParams.append('origin', '*');
 
     const res = await fetchWithTimeout(url.toString());
     const data = await res.json();
     
+    // ヒットしなかった場合の処理
     if (!data.query || !data.query.categorymembers || data.query.categorymembers.length === 0) {
-        // ランダム開始位置でヒットしなかった場合、開始位置指定なしで再トライ
-        // (カテゴリ自体は存在するが、指定した文字から始まる記事がない場合のため)
         const fallbackUrl = new URL(CONFIG.API_URL);
         fallbackUrl.searchParams.append('format', 'json');
         fallbackUrl.searchParams.append('action', 'query');
@@ -141,12 +150,12 @@ async function getRandomTopic() {
         const fallbackData = await fallbackRes.json();
         
         if (!fallbackData.query || !fallbackData.query.categorymembers || fallbackData.query.categorymembers.length === 0) {
-             throw new Error(`カテゴリ【${targetCat}】の記事リスト取得に失敗しました`);
+             throw new Error(`カテゴリ【${targetCat}】の記事取得に失敗`);
         }
         
         const members = fallbackData.query.categorymembers;
         const pages = members.filter(m => m.ns === 0);
-        if (pages.length === 0) throw new Error(`カテゴリ【${targetCat}】内に記事が見つかりませんでした`);
+        if (pages.length === 0) throw new Error(`カテゴリ【${targetCat}】内に記事なし`);
         const randomPage = pages[Math.floor(Math.random() * pages.length)];
         return { title: randomPage.title, category: targetCat };
     }
@@ -155,8 +164,7 @@ async function getRandomTopic() {
     const pages = members.filter(m => m.ns === 0);
     
     if (pages.length === 0) {
-        // ランダム開始位置では記事が見つからなかった（サブカテゴリしかなかった等）場合
-        throw new Error(`カテゴリ【${targetCat}】内の検索位置に記事がありませんでした`);
+        throw new Error(`カテゴリ【${targetCat}】内に記事なし`);
     }
 
     const randomPage = pages[Math.floor(Math.random() * pages.length)];
@@ -237,7 +245,7 @@ async function fetchFullText() {
             retryCount++;
             
             if (retryCount > maxRetries) {
-                textArea.value = "❌ 取得できませんでした。\nエラー: " + error.message;
+                textArea.value = "❌ 取得できませんでした。時間をおいて再度お試しください。";
                 updateUI('error');
             } else {
                 await new Promise(resolve => setTimeout(resolve, 300));
