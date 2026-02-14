@@ -1,5 +1,5 @@
 /**
- * History Full-Text Reader - Minimal Logic (Copy Button Removed)
+ * History Full-Text Reader - Minimal Logic (Retry with Category Display)
  */
 
 // ========================================
@@ -62,7 +62,7 @@ function fetchWithTimeout(url, timeout = CONFIG.API_TIMEOUT_MS) {
 
 /**
  * ランダムに歴史カテゴリからタイトルを取得
- * 修正：内部でのフォールバックを廃止し、失敗時はエラーを投げてリトライさせる
+ * 変更：カテゴリ名も一緒に返すようにした
  */
 async function getRandomTopic() {
     const categories = ["歴史", "日本の歴史", "世界史", "戦国武将", "フランスの歴史", "考古学"];
@@ -80,18 +80,19 @@ async function getRandomTopic() {
     const data = await res.json();
     
     if (!data.query || !data.query.categorymembers || data.query.categorymembers.length === 0) {
-        throw new Error(`カテゴリ ${targetCat} のリスト取得に失敗しました`);
+        throw new Error(`カテゴリ ${targetCat} のリスト取得に失敗`);
     }
 
     const members = data.query.categorymembers;
     const pages = members.filter(m => m.ns === 0);
     
     if (pages.length === 0) {
-        throw new Error(`カテゴリ ${targetCat} 内に有効な記事が見つかりませんでした`);
+        throw new Error(`カテゴリ ${targetCat} 内に記事なし`);
     }
 
     const randomPage = pages[Math.floor(Math.random() * pages.length)];
-    return randomPage.title;
+    // タイトルと使用したカテゴリをセットで返す
+    return { title: randomPage.title, category: targetCat };
 }
 
 function updateUI(status) {
@@ -114,26 +115,31 @@ async function fetchFullText() {
     if (!textArea || !genBtn) return;
 
     genBtn.disabled = true;
-    textArea.value = "検索中...";
+    textArea.value = "検索開始...";
     updateUI('fetching');
 
     let retryCount = 0;
-    const maxRetries = 3; // 最大3回のリトライ（合計4回目の試行が最終手段）
+    const maxRetries = 3;
     let success = false;
 
     while (retryCount <= maxRetries && !success) {
         try {
-            let topic;
-            // 3回リトライしてもダメだった場合（4回目のループ）のみ固定ワードを使用
+            let topic, category;
+
             if (retryCount < maxRetries) {
-                topic = await getRandomTopic();
+                // 通常のランダム取得
+                const result = await getRandomTopic();
+                topic = result.title;
+                category = result.category;
             } else {
+                // 最終リトライ（4回目）
                 topic = "日本の歴史";
+                category = "最終フォールバック";
             }
 
-            textArea.value = (retryCount > 0) 
-                ? `再試行中(${retryCount}/${maxRetries}): 【${topic}】の詳細を読み込み中...`
-                : `【${topic}】の詳細を読み込み中...`;
+            // 画面表示を更新（カテゴリ名を含める）
+            const retryLabel = retryCount > 0 ? `再試行中(${retryCount}/${maxRetries}): ` : "";
+            textArea.value = `${retryLabel}カテゴリ【${category}】から\n【${topic}】を取得しています...`;
 
             const url = new URL(CONFIG.API_URL);
             url.searchParams.append('format', 'json');
@@ -148,12 +154,12 @@ async function fetchFullText() {
             const pages = data.query.pages;
             const pageId = Object.keys(pages)[0];
             
-            if (pageId === "-1") throw new Error('Wikipediaに該当記事がありません');
+            if (pageId === "-1") throw new Error('該当記事なし');
             
             const fullText = pages[pageId].extract;
-            if (!fullText) throw new Error('記事の内容が空です');
+            if (!fullText) throw new Error('内容が空');
 
-            const content = `【主題: ${topic}】\n\n${fullText}`;
+            const content = `【主題: ${topic}】\n(カテゴリ: ${category})\n\n${fullText}`;
             textArea.value = content;
             if (charCountDisplay) charCountDisplay.textContent = `${content.length.toLocaleString()} chars`;
 
@@ -162,14 +168,13 @@ async function fetchFullText() {
             success = true;
 
         } catch (error) {
-            console.warn(`試行 ${retryCount + 1} 回目が失敗: ${error.message}`);
+            console.warn(`Attempt ${retryCount + 1} failed: ${error.message}`);
             retryCount++;
             
             if (retryCount > maxRetries) {
-                textArea.value = "❌ 規定回数の試行を終えましたが取得できませんでした。\n最終エラー: " + error.message;
+                textArea.value = "❌ 取得できませんでした。時間をおいて再度お試しください。\nエラー: " + error.message;
                 updateUI('error');
             } else {
-                // 次のリトライへ（APIへの連続負荷を避けるため300ms待機）
                 await new Promise(resolve => setTimeout(resolve, 300));
             }
         }
