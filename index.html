@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' https://ja.wikipedia.org; style-src 'self' 'unsafe-inline';">
-    <title>History Wiki-Text Reader</title>
+    <title>戦国武将 Wiki-Text Reader</title>
     <style>
         * { box-sizing: border-box; }
         
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             margin: 0;
-            padding: 10px; /* スマホ用に余白を少し縮小 */
+            padding: 10px;
             background-color: #ffffff;
             color: #1a1a1a;
             display: flex;
@@ -23,7 +23,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-wrap: wrap; /* スマホで項目が溢れたら折り返す */
+            flex-wrap: wrap;
             gap: 10px;
             margin-bottom: 10px;
             padding-bottom: 10px;
@@ -44,7 +44,7 @@
             padding: 6px;
             border-radius: 4px;
             background: #fff;
-            font-size: 0.9rem; /* スマホでズームされないサイズ */
+            font-size: 0.9rem;
         }
 
         .controls { 
@@ -55,7 +55,7 @@
         }
 
         button { 
-            flex: 1; /* ボタンを横いっぱいに広げる */
+            flex: 1; 
             padding: 12px; 
             border: 1px solid #000; 
             background: #000;
@@ -64,10 +64,10 @@
             cursor: pointer; 
             font-size: 0.85rem;
             font-weight: bold;
-            -webkit-tap-highlight-color: transparent; /* タップ時の青枠を消す */
+            -webkit-tap-highlight-color: transparent;
         }
         button:hover { background: #333; }
-        button:active { background: #555; } /* タップ時のフィードバック */
+        button:active { background: #555; }
         button:disabled { border-color: #ccc; background: #ccc; cursor: not-allowed; }
 
         .main-content {
@@ -77,7 +77,6 @@
             min-height: 0;
         }
 
-        /* テキストエリアの調整 */
         textarea { 
             flex-grow: 1;
             width: 100%; 
@@ -88,9 +87,8 @@
             outline: none;
             resize: none;
             background-color: #fafafa;
-            color: #333; /* 編集不可でも文字を読みやすく */
-            -webkit-overflow-scrolling: touch; /* iOSでのスクロールを滑らかに */
-            max-height: 90%
+            color: #333; 
+            -webkit-overflow-scrolling: touch; 
         }
 
         .status-bar {
@@ -120,7 +118,6 @@
 
         .hidden { display: none !important; }
 
-        /* スマホ向け微調整 */
         @media (max-width: 480px) {
             h1 { width: 100%; text-align: center; }
             .settings { width: 100%; justify-content: space-between; }
@@ -130,7 +127,7 @@
 <body>
 
 <header>
-    <h1>HISTORY WIKI-TEXT</h1>
+    <h1>戦国武将 Wiki-Text Reader</h1>
     <div class="settings">
         <div>Size: <input type="number" id="fontSize" value="14" min="8" max="50" inputmode="numeric"></div>
         <div>Font: 
@@ -148,7 +145,7 @@
 </div>
 
 <div class="main-content">
-    <textarea id="result" placeholder="ボタンを押すとランダムに歴史の全文が読み込まれます..." readonly></textarea>
+    <textarea id="result" placeholder="ボタンを押すとランダムに戦国武将の記事が読み込まれます..." readonly></textarea>
     <div class="status-bar">
         <span id="statusText" class="status-ready">READY</span>
         <span id="charCountDisplay">0 chars</span>
@@ -159,7 +156,3 @@
 
 </body>
 </html>
-
-
-
-
